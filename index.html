@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Bestie Ultimate</title>
+<style>
+:root{
+  --bg1:#667eea;
+  --bg2:#764ba2;
+  --glass:rgba(255,255,255,0.12);
+  --text:#fff;
+  --user:#4facfe;
+  --bot:rgba(255,255,255,0.18);
+}
+body.light{
+  --glass:rgba(0,0,0,0.06);
+  --text:#111;
+  --bot:#eaeaea;
+}
+*{box-sizing:border-box;margin:0;padding:0;font-family:Segoe UI,sans-serif}
+body{
+  height:100vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  background:linear-gradient(-45deg,var(--bg1),var(--bg2));
+  background-size:400% 400%;
+  animation:gradient 12s ease infinite;
+  color:var(--text);
+}
+@keyframes gradient{
+  0%{background-position:0% 50%}
+  50%{background-position:100% 50%}
+  100%{background-position:0% 50%}
+}
+.container{
+  width:95%;
+  max-width:900px;
+  height:94vh;
+  backdrop-filter:blur(25px);
+  background:var(--glass);
+  border-radius:25px;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  position:relative;
+}
+.header{
+  padding:18px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+.chat{
+  flex:1;
+  padding:20px;
+  overflow-y:auto;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+.message{
+  max-width:75%;
+  padding:14px 16px;
+  border-radius:18px;
+  position:relative;
+  animation:fade .3s ease;
+  white-space:pre-wrap;
+}
+.user{
+  align-self:flex-end;
+  background:var(--user);
+}
+.bot{
+  align-self:flex-start;
+  background:var(--bot);
+}
+.timestamp{
+  font-size:10px;
+  opacity:.6;
+  margin-top:6px;
+}
+.copy-btn{
+  position:absolute;
+  top:6px;
+  right:8px;
+  font-size:12px;
+  cursor:pointer;
+  opacity:.6;
+}
+.copy-btn:hover{opacity:1}
+.input-area{
+  display:flex;
+  padding:15px;
+}
+input,select{
+  padding:10px;
+  border:none;
+  border-radius:10px;
+  outline:none;
+}
+#messageInput{flex:1}
+button{
+  margin-left:8px;
+  padding:10px 14px;
+  border:none;
+  border-radius:10px;
+  cursor:pointer;
+}
+.settings{
+  position:absolute;
+  right:-280px;
+  top:0;
+  width:280px;
+  height:100%;
+  background:#000000e6;
+  padding:18px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  transition:.3s;
+  overflow-y:auto;
+}
+.settings.open{right:0}
+.status{
+  font-size:12px;
+  margin-top:4px;
+}
+.typing{
+  display:flex;
+  gap:4px;
+  align-self:flex-start;
+}
+.dot{
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:#ccc;
+  animation:bounce 1.2s infinite;
+}
+.dot:nth-child(2){animation-delay:.2s}
+.dot:nth-child(3){animation-delay:.4s}
+@keyframes bounce{
+  0%,80%,100%{transform:scale(0)}
+  40%{transform:scale(1)}
+}
+@keyframes fade{
+  from{opacity:0;transform:translateY(10px)}
+  to{opacity:1;transform:translateY(0)}
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h3 id="botName">AI Bestie</h3>
+    <div>
+      <button onclick="toggleTheme()">🌙</button>
+      <button onclick="toggleSettings()">⚙️</button>
+    </div>
+  </div>
+
+  <div class="chat" id="chat"></div>
+
+  <div class="input-area">
+    <input type="text" id="messageInput" placeholder="Type a message...">
+    <button onclick="handleSend()">Send</button>
+  </div>
+</div>
+
+<div class="settings" id="settingsPanel">
+  <label>Bot Name</label>
+  <input type="text" id="nameInput">
+
+  <label>Personality</label>
+  <select id="personality">
+    <option>Friendly</option>
+    <option>Playful</option>
+    <option>Slightly Annoying</option>
+    <option>Jealous Best Friend</option>
+    <option>Motivational Coach</option>
+    <option>Sarcastic Genius</option>
+    <option>Calm Listener</option>
+  </select>
+
+  <label>Creativity</label>
+  <input type="range" id="temperature" min="0" max="1" step="0.1" value="0.7">
+
+  <label>Gemini API Key</label>
+  <input type="password" id="apiKeyInput" placeholder="Paste API key">
+  <button onclick="saveApiKey()">Save Key</button>
+  <div class="status" id="apiStatus">🔴 AI Offline</div>
+
+  <button onclick="clearChat()">Clear Chat</button>
+</div>
+
+<script>
+const chat=document.getElementById("chat");
+const input=document.getElementById("messageInput");
+const personalitySelect=document.getElementById("personality");
+const tempSlider=document.getElementById("temperature");
+const nameInput=document.getElementById("nameInput");
+const botNameEl=document.getElementById("botName");
+const apiStatus=document.getElementById("apiStatus");
+
+let API_KEY="";
+let memory=JSON.parse(localStorage.getItem("emotionalMemory"))||{
+  mood:"neutral",
+  facts:[]
+};
+
+loadChat();
+loadSettings();
+
+input.addEventListener("keypress",e=>{
+  if(e.key==="Enter") handleSend();
+});
+
+function sanitize(text){
+  return text.replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));
+}
+
+function addMessage(text,type){
+  const msg=document.createElement("div");
+  msg.className="message "+type;
+  msg.innerHTML=sanitize(text)+
+    `<div class="copy-btn" onclick="copyText(this)">📋</div>
+     <div class="timestamp">${new Date().toLocaleTimeString()}</div>`;
+  chat.appendChild(msg);
+  chat.scrollTop=chat.scrollHeight;
+  saveChat();
+}
+
+function copyText(el){
+  const text=el.parentElement.childNodes[0].nodeValue;
+  navigator.clipboard.writeText(text);
+}
+
+function handleSend(){
+  const text=input.value.trim();
+  if(!text) return;
+  addMessage(text,"user");
+  input.value="";
+  showTyping();
+  updateMemory(text);
+  sendMessageToAI(text);
+}
+
+function showTyping(){
+  const typing=document.createElement("div");
+  typing.className="typing";
+  typing.id="typing";
+  typing.innerHTML='<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
+  chat.appendChild(typing);
+  chat.scrollTop=chat.scrollHeight;
+}
+
+function removeTyping(){
+  const t=document.getElementById("typing");
+  if(t) t.remove();
+}
+
+function updateMemory(message){
+  if(message.toLowerCase().includes("sad")) memory.mood="sad";
+  if(message.toLowerCase().includes("happy")) memory.mood="happy";
+  if(message.toLowerCase().includes("my name is")){
+    const name=message.split("my name is")[1].trim();
+    memory.facts.push("User name is "+name);
+  }
+  localStorage.setItem("emotionalMemory",JSON.stringify(memory));
+}
+
+function saveApiKey(){
+  API_KEY=document.getElementById("apiKeyInput").value.trim();
+  if(API_KEY){
+    apiStatus.innerText="🟢 AI Online (Key Loaded)";
+  }else{
+    apiStatus.innerText="🔴 AI Offline";
+  }
+}
+
+async function sendMessageToAI(message){
+  if(!API_KEY){
+    removeTyping();
+    addMessage("Please add your API key in settings.","bot");
+    return;
+  }
+
+  const personality=personalitySelect.value;
+  const temperature=tempSlider.value;
+
+  const systemPrompt=`
+You are ${botNameEl.innerText}.
+Personality mode: ${personality}.
+User emotional mood: ${memory.mood}.
+Important facts: ${memory.facts.join(", ")}.
+Respond with emotional depth.
+Do not be robotic.
+Write meaningful multi-sentence replies.
+`;
+
+  try{
+    const response=await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key="+API_KEY,
+      {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          contents:[
+            {
+              role:"user",
+              parts:[{text: systemPrompt+"\nUser: "+message}]
+            }
+          ],
+          generationConfig:{
+            temperature:parseFloat(temperature)
+          }
+        })
+      }
+    );
+
+    const data=await response.json();
+    removeTyping();
+
+    const reply=data.candidates?.[0]?.content?.parts?.[0]?.text
+      || "AI returned no response.";
+
+    addMessage(reply,"bot");
+
+  }catch(err){
+    removeTyping();
+    addMessage("Error connecting to Gemini API.","bot");
+  }
+}
+
+function toggleTheme(){
+  document.body.classList.toggle("light");
+}
+
+function toggleSettings(){
+  document.getElementById("settingsPanel").classList.toggle("open");
+}
+
+function saveChat(){
+  localStorage.setItem("chatHistory",chat.innerHTML);
+}
+
+function loadChat(){
+  const saved=localStorage.getItem("chatHistory");
+  if(saved) chat.innerHTML=saved;
+}
+
+function clearChat(){
+  chat.innerHTML="";
+  localStorage.removeItem("chatHistory");
+}
+
+function loadSettings(){
+  const savedName=localStorage.getItem("botName");
+  if(savedName){
+    botNameEl.innerText=savedName;
+    nameInput.value=savedName;
+  }
+}
+
+nameInput.addEventListener("input",()=>{
+  botNameEl.innerText=nameInput.value;
+  localStorage.setItem("botName",nameInput.value);
+});
+</script>
+
+</body>
+</html>
